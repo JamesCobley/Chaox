@@ -44,18 +44,26 @@ df_clean['Transformation'] = df_clean.apply(
     axis=1
 )
 
-# === Step 8: Angular deviation from identity vector (1,1) ===
-def redox_direction_angle(early, late):
-    v = np.array([early, late])
-    ref = np.array([1, 1])
-    if np.allclose(v, 0):
-        return 0.0
-    cos_sim = np.dot(v, ref) / (norm(v) * norm(ref))
-    cos_sim = np.clip(cos_sim, -1.0, 1.0)
-    return degrees(acos(cos_sim))
+from math import atan2, degrees
 
+def deflection_angle_from_identity(early, late):
+    """
+    Compute the angular deflection (in degrees) between the flat trajectory
+    (no change over time) and the observed redox shift from timepoint 0 to 60.
+    
+    The baseline vector is (0, 0) → (60, 0)
+    The observed vector is (0, 0) → (60, late - early)
+    The angle is arctangent((Δ redox) / Δ time), converted to degrees.
+    
+    Returns:
+        Absolute angular deflection in degrees.
+    """
+    delta = late - early          # Redox shift (vertical change)
+    time_interval = 60            # Minutes between t=0 and t=60
+    angle_rad = atan2(delta, time_interval)
+    return abs(degrees(angle_rad))  # Return positive deflection from flat
 df_clean['Angle_Degrees'] = df_clean.apply(
-    lambda row: redox_direction_angle(row['Early_Mean'], row['Late_Mean']),
+    lambda row: deflection_angle_from_identity(row['Early_Mean'], row['Late_Mean']),
     axis=1
 )
 
@@ -84,4 +92,17 @@ site_summary['Angle_Radians'] = np.radians(site_summary['Angle_Degrees'])
 angle_summary = site_summary.groupby('Transformation')[['Angle_Degrees', 'Angle_Radians']].agg(['mean', 'std', 'count']).round(3)
 
 print("\n📐 Angular Deviation by Transformation Class:")
-print(angle_summary
+print(angle_summary)
+
+# Group angular values per transformation class
+auc_per_class = df_clean.groupby('Transformation')['Angle_Degrees'].sum().round(3)
+
+# Optionally normalize by number of sites (mean area per site)
+normalized_auc = df_clean.groupby('Transformation')['Angle_Degrees'].mean().round(3)
+
+# Print AUC and normalized AUC
+print("📐 AUC of Angular Deflection per Transformation Class (Degrees):")
+print(auc_per_class)
+
+print("\n📐 Normalized AUC (Mean Angular Deflection per Site):")
+print(normalized_auc)
